@@ -39,11 +39,9 @@ func (room *Room) isConnectionInRoom(connection net.Conn) bool {
 	for i := range room.connections {
 		localConnection := room.connections[i]
 
-		if localConnection.LocalAddr().String() != connection.LocalAddr().String() {
-			continue
+		if localConnection.RemoteAddr().String() == connection.RemoteAddr().String() {
+			return true
 		}
-
-		return true
 	}
 
 	return false
@@ -71,7 +69,7 @@ func (room *Room) LogMessage(connection net.Conn, logMessage string) error {
 	logText := fmt.Sprintf(
 		"[%s] %s: %s",
 		timeStamp.Format(time.RFC822),
-		connection.LocalAddr().String(),
+		connection.RemoteAddr().String(),
 		logMessage,
 	)
 
