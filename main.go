@@ -3,19 +3,20 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
+	"tcpchat/internal/room"
 )
 
-func handleConnection(connection net.Conn) {
+func handleConnection(connection net.Conn, room room.Room) {
 	defer connection.Close()
 
-	message := fmt.Sprintf(
-		"Connection for local address %s is being handled",
-		connection.LocalAddr(),
-	)
+	error := room.AddConnection(connection)
 
-	fmt.Println(message)
+	if error != nil {
+		fmt.Println(error.Error())
+
+		return
+	}
 
 	scanner := bufio.NewScanner(connection)
 
@@ -24,21 +25,18 @@ func handleConnection(connection net.Conn) {
 
 		if !isReadSuccesful {
 			fmt.Println("Read attempt failed")
+			return
 		}
 
-		scannedText := []byte(scanner.Text())
-		logText := fmt.Sprintf(
-			"Connection %s: %s",
-			connection.LocalAddr().String(),
-			scannedText,
-		)
-
-		connection.Write([]byte(logText))
-		log.Println(logText)
+		room.LogMessage(connection, scanner.Text())
 	}
 }
 
 func main() {
+	room := room.Room{
+		Name: "localRoom",
+	}
+
 	fmt.Println("Start listening connections in port 4000")
 	connectionListener, error := net.Listen("tcp", "localhost:4000")
 
@@ -55,6 +53,6 @@ func main() {
 			continue
 		}
 
-		handleConnection(connection)
+		handleConnection(connection, room)
 	}
 }
