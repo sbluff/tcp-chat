@@ -9,7 +9,7 @@ import (
 
 type Room struct {
 	Name                    string
-	connections             []net.Conn
+	connections             []RoomConnection
 	messages                []RoomMessage
 	addConnectionChannel    chan net.Conn
 	removeConnectionChannel chan net.Conn
@@ -28,7 +28,14 @@ func (room *Room) addConnection(connection net.Conn) error {
 		return errors.New("Cant add a connection that is already in the room")
 	}
 
-	updatedConnections := append(room.connections, connection)
+	connectionToAdd := RoomConnection{
+		Connection:  connection,
+		RoomMessage: make(chan RoomMessage),
+	}
+
+	go connectionToAdd.Run()
+
+	updatedConnections := append(room.connections, connectionToAdd)
 	room.connections = updatedConnections
 
 	return nil
@@ -39,12 +46,12 @@ func (room *Room) removeConnection(connection net.Conn) error {
 		return errors.New("Cant remove a connection that is not in the room")
 	}
 
-	var updatedConnections []net.Conn
+	var updatedConnections []RoomConnection
 
 	for i := range room.connections {
 		roomConnection := room.connections[i]
 
-		if roomConnection.RemoteAddr().String() != connection.RemoteAddr().String() {
+		if roomConnection.GetRemoteAddress() != connection.RemoteAddr().String() {
 			updatedConnections = append(updatedConnections, roomConnection)
 		}
 	}
@@ -64,28 +71,10 @@ func (room *Room) Run() {
 			case channelAddConnectionData := <-room.addConnectionChannel:
 				room.addConnection(channelAddConnectionData)
 			case channelRemoveConnectionData := <-room.removeConnectionChannel:
-				room.addConnection(channelRemoveConnectionData)
+				room.removeConnection(channelRemoveConnectionData)
 			}
 		}
 	}()
-}
-
-func (room *Room) isConnectionInRoom(connection net.Conn) bool {
-	for i := range room.connections {
-		localConnection := room.connections[i]
-
-		if localConnection.RemoteAddr().String() == connection.RemoteAddr().String() {
-			return true
-		}
-	}
-
-	return false
-}
-
-type RoomMessage struct {
-	creatorConnection net.Conn
-	createdAt         time.Time
-	content           string
 }
 
 func (room *Room) LogMessage(connection net.Conn, logMessage string) error {
@@ -101,18 +90,34 @@ func (room *Room) LogMessage(connection net.Conn, logMessage string) error {
 		content:           logMessage,
 	}
 
-	logText := fmt.Sprintf(
-		"[%s] %s: %s",
-		timeStamp.Format(time.RFC822),
-		connection.RemoteAddr().String(),
-		logMessage,
-	)
-
-	fmt.Println(logText)
+	fmt.Println(roomMessage.LogContents())
 
 	room.messages = append(room.messages, roomMessage)
+	room.updateListeners(roomMessage)
+
 	return nil
 }
 
-func main() {
+func (room *Room) isConnectionInRoom(connection net.Conn) bool {
+	for i := range room.connections {
+		localConnection := room.connections[i]
+
+		if localConnection.GetRemoteAddress() == connection.RemoteAddr().String() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (room *Room) updateListeners(roomMessage RoomMessage) {
+	for i := range room.connections {
+		roomConnection := room.connections[i]
+
+		if roomConnection.GetRemoteAddress() == roomMessage.creatorConnection.RemoteAddr().String() {
+			continue
+		}
+
+		roomConnection.RoomMessage <- roomMessage
+	}
 }
