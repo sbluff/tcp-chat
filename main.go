@@ -7,16 +7,15 @@ import (
 	"tcpchat/internal/room"
 )
 
-func handleConnection(connection net.Conn, room room.Room) {
-	defer connection.Close()
+func handleConnectionClose(connection net.Conn, room *room.Room) {
+	connection.Close()
+	room.RemoveConnection(connection)
+}
 
-	error := room.AddConnection(connection)
+func handleConnection(connection net.Conn, room *room.Room) {
+	defer handleConnectionClose(connection, room)
 
-	if error != nil {
-		fmt.Println(error.Error())
-
-		return
-	}
+	room.AddConnection(connection)
 
 	scanner := bufio.NewScanner(connection)
 
@@ -37,6 +36,8 @@ func main() {
 		Name: "localRoom",
 	}
 
+	room.Run()
+
 	fmt.Println("Start listening connections in port 4000")
 	connectionListener, error := net.Listen("tcp", "localhost:4000")
 
@@ -53,6 +54,6 @@ func main() {
 			continue
 		}
 
-		handleConnection(connection, room)
+		go handleConnection(connection, &room)
 	}
 }
