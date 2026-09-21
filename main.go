@@ -36,6 +36,8 @@ func main() {
 		Name: "localRoom",
 	}
 
+	defer room.CloseRoom()
+
 	room.Run()
 
 	fmt.Println("Start listening connections in port 4000")
@@ -50,7 +52,7 @@ func main() {
 		connection, error := connectionListener.Accept()
 
 		if error != nil {
-			fmt.Println("connection restarted")
+			fmt.Println("connection cant be established!")
 			continue
 		}
 
