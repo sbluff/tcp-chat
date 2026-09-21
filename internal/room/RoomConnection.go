@@ -5,8 +5,8 @@ import (
 )
 
 type RoomConnection struct {
-	Connection  net.Conn
-	RoomMessage chan RoomMessage
+	Connection         net.Conn
+	RoomMessageChannel chan RoomMessage
 }
 
 func (roomConnection RoomConnection) GetRemoteAddress() string {
@@ -15,7 +15,11 @@ func (roomConnection RoomConnection) GetRemoteAddress() string {
 
 func (roomConnection *RoomConnection) Run() {
 	for {
-		message := <-roomConnection.RoomMessage
+		message, ok := <-roomConnection.RoomMessageChannel
+
+		if !ok {
+			return
+		}
 
 		logContents := []byte(message.LogContents())
 
