@@ -15,6 +15,17 @@ type Room struct {
 	removeConnectionChannel chan net.Conn
 }
 
+func (room *Room) CloseRoom() {
+	for i := range room.connections {
+		connection := room.connections[i]
+		room.RemoveConnection(connection.Connection)
+		connection.Connection.Close()
+	}
+
+	close(room.addConnectionChannel)
+	close(room.removeConnectionChannel)
+}
+
 func (room *Room) AddConnection(connection net.Conn) {
 	room.addConnectionChannel <- connection
 }
@@ -29,8 +40,8 @@ func (room *Room) addConnection(connection net.Conn) error {
 	}
 
 	connectionToAdd := RoomConnection{
-		Connection:  connection,
-		RoomMessage: make(chan RoomMessage),
+		Connection:         connection,
+		RoomMessageChannel: make(chan RoomMessage),
 	}
 
 	go connectionToAdd.Run()
@@ -53,6 +64,8 @@ func (room *Room) removeConnection(connection net.Conn) error {
 
 		if roomConnection.GetRemoteAddress() != connection.RemoteAddr().String() {
 			updatedConnections = append(updatedConnections, roomConnection)
+		} else {
+			close(roomConnection.RoomMessageChannel)
 		}
 	}
 
@@ -68,9 +81,21 @@ func (room *Room) Run() {
 	go func() {
 		for {
 			select {
-			case channelAddConnectionData := <-room.addConnectionChannel:
+			case channelAddConnectionData, ok := <-room.addConnectionChannel:
+				if !ok {
+					fmt.Println("Add channel connection is closed, closing room...")
+
+					return
+				}
+
 				room.addConnection(channelAddConnectionData)
-			case channelRemoveConnectionData := <-room.removeConnectionChannel:
+			case channelRemoveConnectionData, ok := <-room.removeConnectionChannel:
+				if !ok {
+					fmt.Println("Remove channel connection is closed, closing room...")
+
+					return
+				}
+
 				room.removeConnection(channelRemoveConnectionData)
 			}
 		}
@@ -118,6 +143,6 @@ func (room *Room) updateListeners(roomMessage RoomMessage) {
 			continue
 		}
 
-		roomConnection.RoomMessage <- roomMessage
+		roomConnection.RoomMessageChannel <- roomMessage
 	}
 }
